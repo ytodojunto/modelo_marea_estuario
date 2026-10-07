@@ -101,10 +101,14 @@ def juegos_de_features(era5):
 
 # ---------------- evaluación ----------------
 def metricas(y, yhat, nombre):
+    """detecta_%: de los eventos (residuo >= UMBRAL_EVENTO) cuántos tenían predicción >= UMBRAL_ALERTA.
+    falsas_alarmas_%: de las alertas (predicción >= UMBRAL_ALERTA) cuántas NO alcanzaron
+    UMBRAL_ALERTA en lo observado (mismo umbral en ambos lados)."""
     e = y - yhat
     ev = y >= UMBRAL_EVENTO
-    det = (yhat[ev] >= UMBRAL_ALERTA).mean() if ev.any() else np.nan
-    fa = ((yhat >= UMBRAL_ALERTA) & ~ev).sum() / max((yhat >= UMBRAL_ALERTA).sum(), 1)
+    alerta = yhat >= UMBRAL_ALERTA
+    det = alerta[ev].mean() if ev.any() else np.nan
+    fa = (y[alerta] < UMBRAL_ALERTA).mean() if alerta.any() else np.nan
     return {
         "modelo": nombre, "n": len(y),
         "RMSE_cm": 100 * np.sqrt(np.mean(e ** 2)),
