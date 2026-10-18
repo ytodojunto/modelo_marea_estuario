@@ -1,0 +1,55 @@
+name: Emitir pronóstico capa combinada (San Fernando, por hora)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Cada hora, después de que el captador del SMN (:20) levante el ciclo nuevo.
+    - cron: '35 * * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: emitir-pronostico
+  cancel-in-progress: false
+
+jobs:
+  emitir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependencias
+        run: pip install requests beautifulsoup4 numpy scikit-learn
+
+      # Clones parciales (solo los archivos que se usan) de los repos públicos de datos.
+      - name: Traer datos
+        run: |
+          mkdir -p repos && cd repos
+          clonar() {  # $1 = repo, resto = rutas
+            repo=$1; shift
+            git clone --depth 1 --filter=blob:none --sparse "https://github.com/ytodojunto/$repo" "$repo"
+            git -C "$repo" sparse-checkout set --no-cone "$@"
+          }
+          clonar SHN_captura_pronosticos /data/historico_alturas.jsonl /capturar_alturas.py
+          clonar INA_captura_delta_2 /data/series/san_fernando.csv /data/historico_prono/
+          clonar SMN_captura_viento /data/historico_viento.jsonl
+
+      - name: Emitir pronóstico
+        run: python analisis/emitir_pronostico.py repos data
+
+      - name: Guardar en el repo
+        run: |
+          git config user.name 'capa-bot'
+          git config user.email 'bot@users.noreply.github.com'
+          git add data/
+          if ! git diff --staged --quiet; then
+            git commit -m 'Pronóstico capa combinada San Fernando'
+            git pull --rebase
+            git push
+          fi

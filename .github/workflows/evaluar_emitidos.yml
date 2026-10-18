@@ -1,0 +1,55 @@
+name: Evaluar pronósticos emitidos (diario)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Después de la captura diaria del INA (13:00 UTC) y de su comparación (14:30 UTC).
+    - cron: '50 14 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: emitir-pronostico
+  cancel-in-progress: false
+
+jobs:
+  evaluar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Traer datos
+        run: |
+          mkdir -p repos && cd repos
+          clonar() {
+            repo=$1; shift
+            git clone --depth 1 --filter=blob:none --sparse "https://github.com/ytodojunto/$repo" "$repo"
+            git -C "$repo" sparse-checkout set --no-cone "$@"
+          }
+          clonar SHN_captura_pronosticos /data/historico_alturas.jsonl
+          clonar INA_captura_delta_2 /data/series/san_fernando.csv
+
+      - name: Evaluar emitidos contra observado
+        run: |
+          if [ -f data/pronosticos_capa.jsonl ]; then
+            python analisis/evaluar_emitidos.py repos data/pronosticos_capa.jsonl data/evaluacion_emitidos.json
+          else
+            echo "todavía no hay pronósticos emitidos"
+          fi
+
+      - name: Guardar en el repo
+        run: |
+          git config user.name 'capa-bot'
+          git config user.email 'bot@users.noreply.github.com'
+          git add data/evaluacion_emitidos.json 2>/dev/null || true
+          if ! git diff --staged --quiet; then
+            git commit -m 'Evaluación de pronósticos emitidos'
+            git pull --rebase
+            git push
+          fi
