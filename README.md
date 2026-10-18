@@ -20,6 +20,7 @@ python3 -I /ruta/analisis/shn_exactitud.py "$PWD/repos"   # genera shn_eventos.j
 python3 -I /ruta/analisis/ina_exactitud.py "$PWD/repos"   # necesita shn_eventos.json; genera sf_extremos.json
 python3 -I /ruta/analisis/modelo_sf.py     "$PWD/repos"   # necesita sf_extremos.json
 python3 -I /ruta/analisis/verif.py         "$PWD/repos"   # reproducción, diagnóstico y mezcla con INA
+python3 -I /ruta/analisis/capa_combinada.py "$PWD/repos"  # capa INA + modelo propio; escribe pronostico_sf_capa.json en trabajo/
 ```
 
 Hace falta `numpy` y `scikit-learn`. El orden importa: cada script usa el JSON que deja el anterior.
@@ -30,5 +31,6 @@ Hace falta `numpy` y `scikit-learn`. El orden importa: cada script usa el JSON q
 | `ina_exactitud.py` | INA horario en San Fernando (pares por corrida, horizonte desde `corrida_forecastdate`), extremos SHN vs INA y corredor Corrientes → Campana (misma hora, sesgo, MAE sin sesgo). |
 | `modelo_sf.py` | Modelo propio en San Fernando: armónico de 17 constituyentes + Ridge por franja de horizonte (residuo reciente + viento SMN). Variante A entrenada hasta el 7/10 y B hasta el 10/10; prueba fuera de muestra desde el 11/10 contra INA y mezcla 50/50. |
 | `verif.py` | Reproduce la ventana del 8-10/10, diagnostica 13-14/10 y mide la sensibilidad de la mezcla. |
+| `capa_combinada.py` | Capa sobre el INA en San Fernando (1-66 h): mezcla 50/50, mezcla con un peso por franja (`bw`, la recomendada), stacking y corrección del INA. Validación cruzada por bloques de 3 días con mezcla anidada, prueba fuera de muestra desde el 11/10 e IC por bootstrap sobre días. Emite el pronóstico de las próximas 66 h con el último ciclo SMN y la última corrida INA (`pronostico_sf_capa.json`). |
 
 Convenciones: error = observado − pronosticado; horas ART (UTC-3); observado de San Fernando muestreado en HH:45 e interpolado a HH:00; emisión del modelo = init del ciclo SMN + 6 h. Las fechas de corte (7/10, 10/10, 11/10) están fijas en el código.
