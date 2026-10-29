@@ -4,7 +4,10 @@ on:
   workflow_dispatch: {}
   schedule:
     # Cada hora, después de que el captador del SMN (:20) levante el ciclo nuevo.
-    - cron: '35 * * * *'
+    # Cuatro disparos por hora porque GitHub descarta o demora muchas corridas programadas
+    # (con un solo '35 * * * *' salían ~5 emisiones por día en vez de 24). Si dos corridas
+    # caen en la misma hora, emitir_pronostico.py no duplica la línea cuando nada cambió.
+    - cron: '7,22,37,52 * * * *'
 
 permissions:
   contents: write
