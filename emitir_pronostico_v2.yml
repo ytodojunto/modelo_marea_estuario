@@ -1,0 +1,64 @@
+name: Emitir pronóstico capa v2 en paralelo (San Fernando, por hora)
+
+# Serie v2 (viento acumulado 24/36 h + viento de Atalaya y San Clemente), en paralelo a la vigente.
+# No toca data/ ni emitir_pronostico.yml: escribe en data_v2/. Se evalúa con el mismo evaluar_emitidos.py.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '12,27,42,57 * * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: emitir-pronostico-v2
+  cancel-in-progress: false
+
+jobs:
+  emitir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependencias
+        run: pip install requests beautifulsoup4 numpy scikit-learn
+
+      - name: Traer datos
+        run: |
+          mkdir -p repos && cd repos
+          clonar() {  # $1 = repo, resto = rutas
+            repo=$1; shift
+            git clone --depth 1 --filter=blob:none --sparse "https://github.com/ytodojunto/$repo" "$repo"
+            git -C "$repo" sparse-checkout set --no-cone "$@"
+          }
+          clonar SHN_captura_pronosticos /data/historico_alturas.jsonl /capturar_alturas.py
+          clonar INA_captura_delta_2 /data/series/san_fernando.csv /data/historico_prono/
+          clonar SMN_captura_viento /data/historico_viento.jsonl
+
+      - name: Emitir pronóstico v2
+        run: python analisis/emitir_pronostico_v2.py repos data_v2
+
+      - name: Evaluar lo emitido (v2)
+        run: |
+          if [ -f data_v2/pronosticos_capa_v2.jsonl ]; then
+            python analisis/evaluar_emitidos.py repos data_v2/pronosticos_capa_v2.jsonl data_v2/evaluacion_emitidos_v2.json
+          fi
+
+      - name: Guardar en el repo
+        run: |
+          git config user.name 'capa-bot'
+          git config user.email 'bot@users.noreply.github.com'
+          git add data_v2/
+          if ! git diff --staged --quiet; then
+            git commit -m 'Pronóstico capa v2 San Fernando'
+            for i in 1 2 3; do
+              git pull --rebase && git push && break
+              sleep 5
+            done
+          fi
